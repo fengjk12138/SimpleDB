@@ -52,10 +52,11 @@ public class RecordId implements Serializable {
     public boolean equals(Object o) {
         // some code goes here
 //        throw new UnsupportedOperationException("implement this");
-//        return o != null &&
-//                this.getPageId().equals(((RecordId) o).getPageId()) &&
-//                this.getTupleNumber() == ((RecordId) o).getTupleNumber();
-        return
+        return o instanceof RecordId &&
+                this.getPageId().equals(((RecordId) o).getPageId()) &&
+                this.getTupleNumber() == ((RecordId) o).getTupleNumber();
+//        return ((RecordId) o).pageId.equals(this.pageId) &&
+//                ((RecordId) o).tupleNum == this.tupleNum;
     }
 
     /**
@@ -67,8 +68,10 @@ public class RecordId implements Serializable {
     @Override
     public int hashCode() {
         // some code goes here
-        throw new UnsupportedOperationException("implement this");
-
+//        throw new UnsupportedOperationException("implement this");
+        int num0 = pageId.hashCode();
+        int num1 = getTupleNumber();
+        return num0 * num1 + num0 / num1 + (num0 | num1);
     }
 
 }
