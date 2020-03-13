@@ -65,7 +65,7 @@ public class TupleDesc implements Serializable {
         for (int i = 0; i < typeAr.length; i++) {
             tupleSize += typeAr[i].getLen();
             if (fieldAr == null || i >= fieldAr.length) {
-                allItem.add(new TDItem(typeAr[i], null));
+                allItem.add(new TDItem(typeAr[i], ""));
             } else {
                 allItem.add(new TDItem(typeAr[i], fieldAr[i]));
             }
