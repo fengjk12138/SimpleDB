@@ -2,6 +2,8 @@ package simpledb;
 
 import java.io.*;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -30,6 +32,7 @@ public class BufferPool {
      */
     public static final int DEFAULT_PAGES = 50;
     Page[] totPage;
+    int numPages;
     int nowUsed;
 
     /**
@@ -40,6 +43,7 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         totPage = new Page[numPages];
+        this.numPages = numPages;
         nowUsed = 0;
     }
 
@@ -75,13 +79,22 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
-        if (nowUsed < totPage.length) {
-            nowUsed++;
-            return totPage[nowUsed - 1];
-        } else {
-            throw new DbException("not enough");
+
+        for (Page i : totPage) {
+            if (i != null && i.getId().equals(pid)) {
+
+                return i;
+            }
         }
-//        return null;
+        if (nowUsed < numPages) {
+            return null;
+        }
+        return null;
+    }
+
+    public void wrritePage(Page page) {
+        totPage[nowUsed] = page;
+        nowUsed++;
     }
 
     /**
@@ -178,7 +191,6 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-        nowUsed = 0;
     }
 
     /**
