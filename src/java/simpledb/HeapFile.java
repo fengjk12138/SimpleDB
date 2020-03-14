@@ -1,6 +1,7 @@
 package simpledb;
 
 import com.sun.security.auth.UnixNumericGroupPrincipal;
+import org.junit.Assert;
 
 import java.io.*;
 import java.util.*;
@@ -71,9 +72,20 @@ public class HeapFile implements DbFile {
 
     // see DbFile.java for javadocs
     public Page readPage(PageId pid) {
-        byte[] data=new byte[BufferPool.getPageSize()];
-
         // some code goes here
+
+
+        try {
+            byte[] data = new byte[BufferPool.getPageSize()];
+            FileInputStream ss = new FileInputStream(fileOndisk);
+            ss.read(data);
+            HeapPage l = new HeapPage((HeapPageId) pid, data);
+            return l;
+        } catch (IOException o) {
+
+        } finally {
+
+        }
         return null;
     }
 
@@ -88,7 +100,7 @@ public class HeapFile implements DbFile {
      */
     public int numPages() {
         // some code goes here
-        return (int)(fileOndisk.length()/BufferPool.getPageSize());
+        return (int) (fileOndisk.length() / BufferPool.getPageSize());
     }
 
     // see DbFile.java for javadocs
@@ -107,10 +119,58 @@ public class HeapFile implements DbFile {
         // not necessary for lab1
     }
 
+    static class TupleListIterator implements DbFileIterator {
+        private List<Tuple> tuples = new ArrayList<>();
+        private boolean isOpen = false;
+        Iterator<Tuple> now = null;
+
+        void append(Tuple tmp) {
+            tuples.add(tmp);
+        }
+
+        @Override
+        public void open() throws DbException, TransactionAbortedException {
+            isOpen = true;
+            now = tuples.iterator();
+        }
+
+        @Override
+        public boolean hasNext() throws DbException, TransactionAbortedException {
+            return isOpen && now.hasNext();
+        }
+
+        @Override
+        public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+            if (!isOpen || now == null || !now.hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return now.next();
+        }
+
+        @Override
+        public void rewind() throws DbException, TransactionAbortedException {
+            if (tuples.isEmpty() || !isOpen) {
+                throw new DbException("not support");
+            }
+            now = tuples.iterator();
+        }
+
+        @Override
+        public void close() {
+            isOpen = false;
+        }
+    }
+
     // see DbFile.java for javadocs
     public DbFileIterator iterator(TransactionId tid) {
-        // some code goes here
-        return null;
+        HeapPage p = (HeapPage) readPage(new HeapPageId(getId(), numPages()));
+
+        Iterator<Tuple> it = p.iterator();
+        TupleListIterator t = new TupleListIterator();
+        while (it.hasNext()) {
+            t.append(it.next());
+        }
+        return t;
     }
 
 }
