@@ -2,6 +2,7 @@ package simpledb;
 
 import java.io.*;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,9 +32,8 @@ public class BufferPool {
      * constructor instead.
      */
     public static final int DEFAULT_PAGES = 50;
-    Page[] totPage;
-    int numPages;
-    int nowUsed;
+    List<Page> totPage;
+    int numPage;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -42,9 +42,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
-        totPage = new Page[numPages];
-        this.numPages = numPages;
-        nowUsed = 0;
+        numPage = numPages;
+        totPage = new LinkedList<>();
     }
 
     public static int getPageSize() {
@@ -79,22 +78,20 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
-
         for (Page i : totPage) {
-            if (i != null && i.getId().equals(pid)) {
-
+            if (i.getId().equals(pid)) {
                 return i;
             }
         }
-        if (nowUsed < numPages) {
-            return null;
+        if (totPage.size() < numPage) {
+            try {
+                totPage.add(Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
+                return totPage.get(totPage.size() - 1);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
         return null;
-    }
-
-    public void wrritePage(Page page) {
-        totPage[nowUsed] = page;
-        nowUsed++;
     }
 
     /**

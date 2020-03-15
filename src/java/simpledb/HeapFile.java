@@ -75,26 +75,17 @@ public class HeapFile implements DbFile {
     // see DbFile.java for javadocs
     public Page readPage(PageId pid) {
         // some code goes here
-//        System.out.println(pid.getPageNumber());
-//        System.out.println(pid.getTableId());
-        if (pid == null || pid.getPageNumber() < 0 || pid.getPageNumber() >= numPages()) {
+        if (pid == null || pid.getPageNumber() < 0 || pid.getPageNumber() >= numPages() || pid.getTableId() != getId()) {
             throw new IllegalArgumentException();
         }
-
         //TODO
         try {
-            Page tmp = Database.getBufferPool().getPage(new TransactionId(), pid, null);
-            if (tmp != null) {
-                return tmp;
-            }
             byte[] data;
             FileInputStream ss = new FileInputStream(fileOndisk);
             ss.skipNBytes(BufferPool.getPageSize() * pid.getPageNumber());
             data = ss.readNBytes(BufferPool.getPageSize());
-            tmp = new HeapPage((HeapPageId) pid, data);
-            Database.getBufferPool().wrritePage(tmp);
-            return tmp;
-        } catch (IOException | DbException | TransactionAbortedException ignored) {
+            return new HeapPage((HeapPageId) pid, data);
+        } catch (IOException ignored) {
 
         }
         return null;
@@ -201,9 +192,6 @@ public class HeapFile implements DbFile {
     private ArrayList<Tuple> loadPageToList(PageId pid) {
         try {
             HeapPage p = (HeapPage) Database.getBufferPool().getPage(null, pid, null);
-            if (p == null) {
-                p = (HeapPage) readPage(pid);
-            }
             Iterator<Tuple> it = p.iterator();
             ArrayList<Tuple> t = new ArrayList<>();
             while (it.hasNext()) {
