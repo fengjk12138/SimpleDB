@@ -135,7 +135,8 @@ public class HeapFile implements DbFile {
         @Override
         public void open() throws DbException, TransactionAbortedException {
             isOpen = true;
-            now = tuples.iterator();
+            if (now == null)
+                now = tuples.iterator();
         }
 
         @Override

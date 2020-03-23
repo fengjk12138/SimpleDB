@@ -12,63 +12,72 @@ public class Join extends Operator {
     /**
      * Constructor. Accepts two children to join and the predicate to join them
      * on
-     * 
+     *
      * @param p
-     *            The predicate to use to join the children
+     * The predicate to use to join the children
      * @param child1
-     *            Iterator for the left(outer) relation to join
+     * Iterator for the left(outer) relation to join
      * @param child2
-     *            Iterator for the right(inner) relation to join
+     * Iterator for the right(inner) relation to join
      */
+    JoinPredicate predicate;
+    OpIterator leftOp;
+    OpIterator rightOp;
+
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
+        predicate = p;
+        leftOp = child1;
+        rightOp = child2;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return null;
+        return predicate;
     }
 
     /**
-     * @return
-     *       the field name of join field1. Should be quantified by
-     *       alias or table name.
-     * */
+     * @return the field name of join field1. Should be quantified by
+     * alias or table name.
+     */
     public String getJoinField1Name() {
         // some code goes here
-        return null;
+        return leftOp.getTupleDesc().getFieldName(predicate.getField1());
     }
 
     /**
-     * @return
-     *       the field name of join field2. Should be quantified by
-     *       alias or table name.
-     * */
+     * @return the field name of join field2. Should be quantified by
+     * alias or table name.
+     */
     public String getJoinField2Name() {
         // some code goes here
-        return null;
+        return rightOp.getTupleDesc().getFieldName(predicate.getField2());
     }
 
     /**
      * @see simpledb.TupleDesc#merge(TupleDesc, TupleDesc) for possible
-     *      implementation logic.
+     * implementation logic.
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return TupleDesc.merge(leftOp.getTupleDesc(), rightOp.getTupleDesc());
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        super.open();
     }
 
     public void close() {
         // some code goes here
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+        leftOp.rewind();
+        rightOp.rewind();
     }
 
     /**
@@ -85,24 +94,55 @@ public class Join extends Operator {
      * <p>
      * For example, if one tuple is {1,2,3} and the other tuple is {1,5,6},
      * joined on equality of the first column, then this returns {1,2,3,1,5,6}.
-     * 
+     *
      * @return The next matching tuple.
      * @see JoinPredicate#filter
      */
+    private Tuple tmp1 = null;
+
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+        Tuple ans = null;
+        leftOp.open();
+        rightOp.open();
+        while (leftOp.hasNext()||rightOp.hasNext()) {
+            if (!rightOp.hasNext() || tmp1 == null) {
+                tmp1 = leftOp.next();
+                rightOp.rewind();
+                rightOp.open();
+            }
+
+            while (rightOp.hasNext()) {
+                Tuple tmp2 = rightOp.next();
+                if (predicate.filter(tmp1, tmp2)) {
+                    int num1 = tmp1.getTupleDesc().numFields(), num2 = tmp2.getTupleDesc().numFields();
+                    ans = new Tuple(getTupleDesc());
+                    for (int i = 0; i < num1; i++)
+                        ans.setField(i, tmp1.getField(i));
+                    for (int i = 0; i < num2; i++)
+                        ans.setField(i + num1, tmp2.getField(i));
+                    ans.setRecordId(tmp1.getRecordId());
+                    return ans;
+                }
+            }
+        }
+        return ans;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+        OpIterator[] it =new OpIterator[2];
+        it[0]=leftOp;
+        it[1]=rightOp;
+        return it;
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        leftOp=children[0];
+        rightOp=children[1];
     }
 
 }

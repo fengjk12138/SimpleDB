@@ -17,7 +17,6 @@ public class FilterTest extends FilterBase {
             assertNotNull(filter.next());
             resultCount += 1;
         }
-
         filter.close();
         return resultCount;
     }
