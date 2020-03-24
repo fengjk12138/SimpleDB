@@ -131,7 +131,9 @@ public class TestUtil {
         // implemented hashCode or equals for tuples.
         boolean matched = false;
         while (expected.hasNext()) {
+
             Tuple expectedTup = expected.next();
+
             matched = false;
             actual.rewind();
 

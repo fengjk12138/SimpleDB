@@ -41,12 +41,13 @@ public class Filter extends Operator {
             TransactionAbortedException {
         // some code goes here
         super.open();
+        childOp.open();
     }
 
     public void close() {
         // some code goes here
         super.close();
-        ;
+        childOp.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
@@ -67,7 +68,7 @@ public class Filter extends Operator {
             TransactionAbortedException, DbException {
         // some code goes here
         Tuple now = null;
-        childOp.open();
+
         while (childOp.hasNext()) {
             Tuple tmp = childOp.next();
             if (predicate.filter(tmp)) {

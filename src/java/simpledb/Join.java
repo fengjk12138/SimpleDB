@@ -67,11 +67,15 @@ public class Join extends Operator {
             TransactionAbortedException {
         // some code goes here
         super.open();
+        leftOp.open();
+        rightOp.open();
     }
 
     public void close() {
         // some code goes here
         super.close();
+        leftOp.close();
+        rightOp.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
@@ -103,9 +107,7 @@ public class Join extends Operator {
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
         Tuple ans = null;
-        leftOp.open();
-        rightOp.open();
-        while (leftOp.hasNext()||rightOp.hasNext()) {
+        while (leftOp.hasNext() || rightOp.hasNext()) {
             if (!rightOp.hasNext() || tmp1 == null) {
                 tmp1 = leftOp.next();
                 rightOp.rewind();
@@ -115,14 +117,7 @@ public class Join extends Operator {
             while (rightOp.hasNext()) {
                 Tuple tmp2 = rightOp.next();
                 if (predicate.filter(tmp1, tmp2)) {
-                    int num1 = tmp1.getTupleDesc().numFields(), num2 = tmp2.getTupleDesc().numFields();
-                    ans = new Tuple(getTupleDesc());
-                    for (int i = 0; i < num1; i++)
-                        ans.setField(i, tmp1.getField(i));
-                    for (int i = 0; i < num2; i++)
-                        ans.setField(i + num1, tmp2.getField(i));
-                    ans.setRecordId(tmp1.getRecordId());
-                    return ans;
+                    return mergeTuple(tmp1, tmp2);
                 }
             }
         }
@@ -132,17 +127,31 @@ public class Join extends Operator {
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        OpIterator[] it =new OpIterator[2];
-        it[0]=leftOp;
-        it[1]=rightOp;
+        OpIterator[] it = new OpIterator[2];
+        it[0] = leftOp;
+        it[1] = rightOp;
         return it;
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
-        leftOp=children[0];
-        rightOp=children[1];
+        leftOp = children[0];
+        rightOp = children[1];
     }
 
+    public static Tuple mergeTuple(Tuple left, Tuple right) {
+
+        TupleDesc tmp = TupleDesc.merge(left.getTupleDesc(), right.getTupleDesc());
+        int num1 = left.getTupleDesc().numFields(), num2 = right.getTupleDesc().numFields();
+        Tuple output = new Tuple(tmp);
+        for (int i = 0; i < num1; i++)
+            output.setField(i, left.getField(i));
+
+        for (int i = 0; i < num2; i++)
+            output.setField(i + num1, right.getField(i));
+//        output.setRecordId(left.getRecordId());
+
+        return output;
+    }
 }
