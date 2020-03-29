@@ -34,7 +34,8 @@ public class BufferPool {
     public static final int DEFAULT_PAGES = 50;
     ConcurrentHashMap<PageId, Page> totPage;
     int numPage;
-
+    ConcurrentHashMap<PageId, Integer> usedTime;
+    int nowTime=0;
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -44,6 +45,7 @@ public class BufferPool {
         // some code goes here
         numPage = numPages;
         totPage = new ConcurrentHashMap<>();
+        usedTime=new ConcurrentHashMap<>();
     }
 
     public static int getPageSize() {
@@ -78,17 +80,17 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
+        usedTime.put(pid, ++nowTime);
         if (totPage.get(pid) != null) {
             return totPage.get(pid);
         }
         try {
-            if (totPage.size() < numPage) {
-                Page needPut = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
-                totPage.put(needPut.getId(), needPut);
-                return needPut;
-            } else {
-                throw new DbException("BufferPool overflow");
+            if (totPage.size() == numPage) {
+                evictPage();
             }
+            Page needPut = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
+            totPage.put(needPut.getId(), needPut);
+            return needPut;
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -201,6 +203,10 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
+        for (PageId i : totPage.keySet()) {
+            flushPage(i);
+        }
+
     }
 
     /**
@@ -215,6 +221,8 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        totPage.remove(pid);
+        usedTime.remove(pid);
     }
 
     /**
@@ -225,6 +233,16 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+
+        DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+        try {
+            Page tmp = getPage(null, pid, null);
+            tmp.markDirty(false, new TransactionId());
+            file.writePage(tmp);
+        } catch (TransactionAbortedException | DbException e) {
+            e.printStackTrace();
+        }
+
     }
 
     /**
@@ -242,6 +260,20 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        PageId now=null;
+        for(PageId i:usedTime.keySet())
+        {
+            if(now==null||usedTime.get(i)<usedTime.get(now))
+                now=i;
+        }
+        try {
+            assert now != null;
+            flushPage(now);
+            discardPage(now);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
 }

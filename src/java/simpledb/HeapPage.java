@@ -20,7 +20,7 @@ public class HeapPage implements Page {
 
     byte[] oldData;
     private final Byte oldDataLock = new Byte((byte) 0);
-    boolean isd;
+    boolean isd=false;
     TransactionId dirtyId;
 
     /**
