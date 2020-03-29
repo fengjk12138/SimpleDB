@@ -71,7 +71,7 @@ public class RecordId implements Serializable {
 //        throw new UnsupportedOperationException("implement this");
         int num0 = pageId.hashCode();
         int num1 = getTupleNumber();
-        return num0 * num1 + num0 / num1 + (num0 | num1);
+        return num0 * num1 + num0 & (num1) + (num0 | num1);
     }
 
 }

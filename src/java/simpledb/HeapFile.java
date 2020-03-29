@@ -28,6 +28,7 @@ public class HeapFile implements DbFile {
     File fileOndisk;
     TupleDesc tableTd;
     int nowPage;
+
     public HeapFile(File f, TupleDesc td) {
         // some code goes here
         fileOndisk = f;
@@ -126,7 +127,7 @@ public class HeapFile implements DbFile {
                 HeapPage.createEmptyPageData());
         p.insertTuple(t);
         p.markDirty(false, tid);
-        byte[] bt=p.getPageData();
+        byte[] bt = p.getPageData();
         FileOutputStream bw = new FileOutputStream(fileOndisk, true);
         bw.write(bt);
         bw.close();
@@ -159,7 +160,8 @@ public class HeapFile implements DbFile {
         Iterator<Tuple> now;
 
         public TupleListIterator(PageId pid) {
-            tuples = loadPageToList(pid);
+            nowPage = 0;
+            tuples = getNextVailPage();
             isOpen = false;
             now = null;
         }
@@ -172,37 +174,51 @@ public class HeapFile implements DbFile {
 
         @Override
         public boolean hasNext() throws DbException, TransactionAbortedException {
-            return isOpen && (now.hasNext() || nowPage + 1 != numPages());
+            if (!isOpen)
+                return false;
+            if (now.hasNext())
+                return true;
+            if(nowPage>=numPages()-1)
+                return false;
+            nowPage++;
+            return getNextVailPage().size() != 0;
         }
 
         @Override
         public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
-            if (!isOpen || now == null || (!now.hasNext() && nowPage + 1 == numPages())) {
+            if (!isOpen || now == null ) {
                 throw new NoSuchElementException();
             }
-            if (now.hasNext()) {
-                return now.next();
-            } else {
-                nowPage++;
-                tuples = loadPageToList(new HeapPageId(getId(), nowPage));
+            if (!now.hasNext()) {
+                tuples = getNextVailPage();
                 now = tuples.iterator();
-                return now.next();
             }
+            return now.next();
         }
 
         @Override
         public void rewind() throws DbException, TransactionAbortedException {
-            if (tuples.isEmpty() || !isOpen) {
+            if (!isOpen) {
                 throw new DbException("not support");
             }
             nowPage = 0;
-            tuples = loadPageToList(new HeapPageId(getId(), nowPage));
+            tuples = getNextVailPage();
             now = tuples.iterator();
         }
 
         @Override
         public void close() {
             isOpen = false;
+        }
+
+        private ArrayList<Tuple> getNextVailPage() {
+            for (int i = nowPage; i < numPages(); i++) {
+                ArrayList<Tuple> tmp = loadPageToList(new HeapPageId(getId(), i));
+                if (tmp.size() != 0)
+                    return tmp;
+                nowPage++;
+            }
+            return new ArrayList<>();
         }
     }
 
