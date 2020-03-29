@@ -28,7 +28,6 @@ public class HeapFile implements DbFile {
     File fileOndisk;
     TupleDesc tableTd;
     int nowPage;
-
     public HeapFile(File f, TupleDesc td) {
         // some code goes here
         fileOndisk = f;
@@ -78,7 +77,6 @@ public class HeapFile implements DbFile {
         if (pid == null || pid.getPageNumber() < 0 || pid.getPageNumber() >= numPages() || pid.getTableId() != getId()) {
             throw new IllegalArgumentException();
         }
-        //TODO
         try {
             byte[] data;
             FileInputStream ss = new FileInputStream(fileOndisk);
@@ -109,16 +107,50 @@ public class HeapFile implements DbFile {
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
-        return null;
         // not necessary for lab1
+        if (t == null) {
+            throw new IOException();
+        }
+
+        for (int i = 0; i < numPages(); i++) {
+            HeapPage tmp = ((HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(getId(), i), null));
+            if (tmp.getNumEmptySlots() != 0) {
+                tmp.insertTuple(t);
+                tmp.markDirty(true, tid);
+                ArrayList<Page> output = new ArrayList<>();
+                output.add(tmp);
+                return output;
+            }
+        }
+        HeapPage p = new HeapPage(new HeapPageId(getId(), numPages()),
+                HeapPage.createEmptyPageData());
+        p.insertTuple(t);
+        p.markDirty(false, tid);
+        byte[] bt=p.getPageData();
+        FileOutputStream bw = new FileOutputStream(fileOndisk, true);
+        bw.write(bt);
+        bw.close();
+        ArrayList<Page> output = new ArrayList<>();
+        output.add(p);
+        return output;
     }
 
     // see DbFile.java for javadocs
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
         // not necessary for lab1
+        if (t == null
+                || t.getRecordId().getPageId().getTableId() != getId()
+                || t.getRecordId().getPageId().getPageNumber() < 0
+                || t.getRecordId().getPageId().getPageNumber() >= numPages())
+            throw new DbException("he tuple cannot be deleted or is not a member of the file");
+        HeapPage tmp = ((HeapPage) Database.getBufferPool().getPage(tid, t.getRecordId().getPageId(), null));
+        tmp.deleteTuple(t);
+        tmp.markDirty(true, tid);
+        ArrayList<Page> output = new ArrayList<>();
+        output.add(tmp);
+        return output;
     }
 
     class TupleListIterator implements DbFileIterator {
