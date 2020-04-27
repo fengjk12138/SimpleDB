@@ -4,7 +4,7 @@ bin/
 dist/
 output/
 log
-
+out/
 .idea
 *.iml
 
