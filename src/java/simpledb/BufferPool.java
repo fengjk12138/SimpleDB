@@ -85,7 +85,7 @@ public class BufferPool {
             return totPage.get(pid);
         }
         try {
-            if (totPage.size() == numPage) {
+            while (totPage.size() >= numPage) {
                 evictPage();
             }
             Page needPut = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
