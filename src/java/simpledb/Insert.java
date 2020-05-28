@@ -11,6 +11,7 @@ public class Insert extends Operator {
     private static final long serialVersionUID = 1L;
     int tabelId;
     OpIterator operator;
+    TransactionId tid;
 
     /**
      * Constructor.
@@ -24,6 +25,7 @@ public class Insert extends Operator {
     public Insert(TransactionId t, OpIterator child, int tableId)
             throws DbException {
         // some code goes here
+        tid = t;
         operator = child;
         this.tabelId = tableId;
         if (!child.getTupleDesc().equals(Database.getCatalog().getTupleDesc(tableId))) {
@@ -79,7 +81,7 @@ public class Insert extends Operator {
 
             while (operator.hasNext()) {
                 num++;
-                Database.getBufferPool().insertTuple(null, tabelId, operator.next());
+                Database.getBufferPool().insertTuple(tid, tabelId, operator.next());
             }
         } catch (IOException e) {
             e.printStackTrace();

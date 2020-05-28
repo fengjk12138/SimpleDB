@@ -90,8 +90,8 @@ public class BufferPool {
             throws TransactionAbortedException, DbException {
         // some code goes here
         addLock(tid, pid, perm);
-        usedTime.put(pid, ++nowTime);
-        if (totPage.get(pid) != null) {
+        if (totPage.containsKey(pid)) {
+            usedTime.put(pid, ++nowTime);
             return totPage.get(pid);
         }
         try {
@@ -99,6 +99,7 @@ public class BufferPool {
                 evictPage();
             }
             Page needPut = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
+            usedTime.put(pid, ++nowTime);
             totPage.put(needPut.getId(), needPut);
             return needPut;
         } catch (IOException e) {
@@ -158,13 +159,14 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        transactionComplete(tid, true);
     }
 
     private boolean canWrite(TransactionId tid, PageId pid) {
         if (exclusive_p_t.containsKey(pid)) {
             return exclusive_p_t.get(pid).equals(tid);
         }
-        if(shared_p_t.get(pid)==null)
+        if (shared_p_t.get(pid) == null)
             return true;
         for (TransactionId i : shared_p_t.get(pid)) {
             if (!i.equals(tid))
@@ -244,6 +246,36 @@ public class BufferPool {
             throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        if (commit) {
+            flushPages(tid);
+
+        } else {
+            if (shared_t_p.containsKey(tid) && shared_t_p.get(tid) != null) {
+                for (PageId i : shared_t_p.get(tid))
+                    discardPage(i);
+            }
+            if (exclusive_t_p.containsKey(tid) && exclusive_t_p.get(tid) != null) {
+                for (PageId i : exclusive_t_p.get(tid))
+                    discardPage(i);
+            }
+        }
+
+        if (exclusive_t_p.containsKey(tid) && exclusive_t_p.get(tid) != null)
+            for (PageId i : exclusive_t_p.get(tid))
+                releasePage(tid, i);
+//                exclusive_p_t.remove(i);
+//        exclusive_t_p.remove(tid);
+
+        if (shared_t_p.containsKey(tid) && shared_t_p.get(tid) != null)
+            for (PageId i : shared_t_p.get(tid))
+                releasePage(tid, i);
+//                if (shared_p_t.containsKey(i) && shared_p_t.get(i) != null) {
+//                    HashSet<TransactionId> tmp = shared_p_t.get(i);
+//                    tmp.remove(tid);
+//                    shared_p_t.put(i, tmp);
+//
+//                }
+//        shared_t_p.remove(tid);
     }
 
     /**
@@ -268,7 +300,9 @@ public class BufferPool {
         DbFile file = Database.getCatalog().getDatabaseFile(tableId);
         ArrayList<Page> u = file.insertTuple(tid, t);
         for (Page page : u) {
-            totPage.put(page.getId(), page);
+            if (page != null)
+                usedTime.put(page.getId(), ++nowTime);
+                totPage.put(page.getId(), page);
         }
     }
 
@@ -336,19 +370,12 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
-
+        if (pid == null||totPage.get(pid)==null)
+            return;
         DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
 
         Page tmp = totPage.get(pid);
-
-        TransactionId tid = null;
-        if (exclusive_p_t.containsKey(pid)) {
-            tid = exclusive_p_t.get(pid);
-        }
-
-        tmp.markDirty(false, tid);
         file.writePage(tmp);
-
         discardPage(pid);
     }
 
@@ -358,6 +385,14 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        if (shared_t_p.containsKey(tid) && shared_t_p.get(tid) != null) {
+            for (PageId i : shared_t_p.get(tid))
+                flushPage(i);
+        }
+        if (exclusive_t_p.containsKey(tid) && exclusive_t_p.get(tid) != null) {
+            for (PageId i : exclusive_t_p.get(tid))
+                flushPage(i);
+        }
     }
 
     /**
@@ -369,11 +404,12 @@ public class BufferPool {
         // not necessary for lab1
         PageId now = null;
         for (PageId i : usedTime.keySet()) {
-            if (now == null || usedTime.get(i) < usedTime.get(now))
+            if ((now == null || usedTime.get(i) < usedTime.get(now)) && totPage.get(i).isDirty() == null)
                 now = i;
         }
         try {
-            assert now != null;
+            if (now == null)
+                throw new DbException("all page is dirty");
             flushPage(now);
         } catch (IOException e) {
             e.printStackTrace();
