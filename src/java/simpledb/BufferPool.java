@@ -2,9 +2,7 @@ package simpledb;
 
 import java.io.*;
 
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -16,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * a page, BufferPool checks that the transaction has the appropriate
  * locks to read/write the page.
  *
- * @Threadsafe, all fields are final
+ * @Threadsafe all fields are final
  */
 public class BufferPool {
     /**
@@ -35,7 +33,14 @@ public class BufferPool {
     ConcurrentHashMap<PageId, Page> totPage;
     int numPage;
     ConcurrentHashMap<PageId, Integer> usedTime;
-    int nowTime=0;
+    ConcurrentHashMap<TransactionId, HashSet<PageId>> shared_t_p;
+    ConcurrentHashMap<TransactionId, HashSet<PageId>> exclusive_t_p;
+
+    ConcurrentHashMap<PageId, HashSet<TransactionId>> shared_p_t;
+    ConcurrentHashMap<PageId, TransactionId> exclusive_p_t;
+
+    int nowTime = 0;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -45,7 +50,11 @@ public class BufferPool {
         // some code goes here
         numPage = numPages;
         totPage = new ConcurrentHashMap<>();
-        usedTime=new ConcurrentHashMap<>();
+        usedTime = new ConcurrentHashMap<>();
+        shared_t_p = new ConcurrentHashMap<>();
+        exclusive_t_p = new ConcurrentHashMap<>();
+        shared_p_t = new ConcurrentHashMap<>();
+        exclusive_p_t = new ConcurrentHashMap<>();
     }
 
     public static int getPageSize() {
@@ -80,6 +89,7 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
+        addLock(tid, pid, perm);
         usedTime.put(pid, ++nowTime);
         if (totPage.get(pid) != null) {
             return totPage.get(pid);
@@ -109,6 +119,35 @@ public class BufferPool {
     public void releasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+
+        if (shared_p_t.containsKey(pid)) {
+            HashSet<TransactionId> af = new HashSet<>();
+            if (shared_p_t.get(pid) != null)
+                for (TransactionId i : shared_p_t.get(pid)) {
+                    if (!i.equals(tid))
+                        af.add(i);
+                }
+            shared_p_t.put(pid, af);
+        }
+        exclusive_p_t.remove(pid);
+        if (shared_t_p.containsKey(tid)) {
+            HashSet<PageId> af = new HashSet<>();
+            if (shared_t_p.get(tid) != null)
+                for (PageId i : shared_t_p.get(tid)) {
+                    if (!i.equals(pid))
+                        af.add(i);
+                }
+            shared_t_p.put(tid, af);
+        }
+        if (exclusive_t_p.containsKey(tid)) {
+            HashSet<PageId> af = new HashSet<>();
+            if (exclusive_t_p.get(tid) != null)
+                for (PageId i : exclusive_t_p.get(tid)) {
+                    if (!i.equals(pid))
+                        af.add(i);
+                }
+            exclusive_t_p.put(tid, af);
+        }
     }
 
     /**
@@ -121,12 +160,76 @@ public class BufferPool {
         // not necessary for lab1|lab2
     }
 
+    private boolean canWrite(TransactionId tid, PageId pid) {
+        if (exclusive_p_t.containsKey(pid)) {
+            return exclusive_p_t.get(pid).equals(tid);
+        }
+        if(shared_p_t.get(pid)==null)
+            return true;
+        for (TransactionId i : shared_p_t.get(pid)) {
+            if (!i.equals(tid))
+                return false;
+        }
+        return true;
+    }
+
+    private synchronized void addLock(TransactionId tid, PageId pid, Permissions pess) throws TransactionAbortedException {
+
+        if (exclusive_p_t.containsKey(pid)) {
+            while (!exclusive_p_t.get(pid).equals(tid)) ;
+//            System.out.println(tid.hashCode());
+//            System.out.println(exclusive_p_t.get(pid).hashCode());
+        }
+
+        if (pess == Permissions.READ_ONLY) {
+            HashSet<TransactionId> tmp = shared_p_t.get(pid);
+            if (tmp == null)
+                tmp = new HashSet<>();
+            tmp.add(tid);
+            shared_p_t.put(pid, tmp);
+            HashSet<PageId> tmp2 = shared_t_p.get(tid);
+            if (tmp2 == null)
+                tmp2 = new HashSet<>();
+            tmp2.add(pid);
+            shared_t_p.put(tid, tmp2);
+
+        } else {
+            while (!canWrite(tid, pid)) ;
+            HashSet<TransactionId> tmp = shared_p_t.get(pid);
+            if (tmp == null)
+                tmp = new HashSet<>();
+            tmp.remove(tid);
+            shared_p_t.put(pid, tmp);
+            HashSet<PageId> tmp2 = shared_t_p.get(tid);
+            if (tmp2 == null)
+                tmp2 = new HashSet<>();
+            tmp2.remove(pid);
+            shared_t_p.put(tid, tmp2);
+            exclusive_p_t.put(pid, tid);
+            tmp2 = exclusive_t_p.get(tid);
+            if (tmp2 == null)
+                tmp2 = new HashSet<>();
+            tmp2.add(pid);
+            exclusive_t_p.put(tid, tmp2);
+        }
+
+    }
+
     /**
      * Return true if the specified transaction has a lock on the specified page
      */
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
+        if (exclusive_p_t.containsKey(p) && exclusive_p_t.get(p) == tid)
+            return true;
+        else if (shared_p_t.containsKey(p)) {
+            for (TransactionId tmp : shared_p_t.get(p)) {
+                if (tmp.equals(tid))
+                    return true;
+            }
+            return false;
+        }
         return false;
     }
 
@@ -158,7 +261,7 @@ public class BufferPool {
      * @param tableId the table to add the tuple to
      * @param t       the tuple to add
      */
-    public void insertTuple(TransactionId tid, int tableId, Tuple t)
+    public synchronized void insertTuple(TransactionId tid, int tableId, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
@@ -182,7 +285,7 @@ public class BufferPool {
      * @param tid the transaction deleting the tuple.
      * @param t   the tuple to delete
      */
-    public void deleteTuple(TransactionId tid, Tuple t)
+    public synchronized void deleteTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
@@ -235,14 +338,18 @@ public class BufferPool {
         // not necessary for lab1
 
         DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        try {
-            Page tmp = getPage(null, pid, null);
-            tmp.markDirty(false, new TransactionId());
-            file.writePage(tmp);
-        } catch (TransactionAbortedException | DbException e) {
-            e.printStackTrace();
+
+        Page tmp = totPage.get(pid);
+
+        TransactionId tid = null;
+        if (exclusive_p_t.containsKey(pid)) {
+            tid = exclusive_p_t.get(pid);
         }
 
+        tmp.markDirty(false, tid);
+        file.writePage(tmp);
+
+        discardPage(pid);
     }
 
     /**
@@ -260,16 +367,14 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
-        PageId now=null;
-        for(PageId i:usedTime.keySet())
-        {
-            if(now==null||usedTime.get(i)<usedTime.get(now))
-                now=i;
+        PageId now = null;
+        for (PageId i : usedTime.keySet()) {
+            if (now == null || usedTime.get(i) < usedTime.get(now))
+                now = i;
         }
         try {
             assert now != null;
             flushPage(now);
-            discardPage(now);
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -344,7 +344,7 @@ public class BTreeFile implements DbFile {
         BTreeInternalPage out = null;
         BTreeInternalPage newPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
         BTreeInternalPageIterator iterator = new BTreeInternalPageIterator(page);
-        int leaftNum = page.getMaxEntries() / 2;
+        int leaftNum = page.getMaxEntries() / 2 + 1;
         ArrayList<BTreeEntry> list = new ArrayList<>();
         for (int i = 0; i < leaftNum; i++) {
             BTreeEntry now = iterator.next();
