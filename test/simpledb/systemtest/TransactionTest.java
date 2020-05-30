@@ -107,7 +107,6 @@ public class TransactionTest extends SimpleDbTestBase {
 
                         // sleep to get some interesting thread interleavings
                         Thread.sleep(1);
-
                         // race the other threads to finish the transaction: one will win
                         q1.close();
 

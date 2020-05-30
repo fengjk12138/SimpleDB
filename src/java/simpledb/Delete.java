@@ -10,7 +10,9 @@ import java.nio.channels.ScatteringByteChannel;
 public class Delete extends Operator {
 
     private static final long serialVersionUID = 1L;
-
+    OpIterator operator;
+    int calledNum = 0;
+    TransactionId tid;
     /**
      * Constructor specifying the transaction that this delete belongs to as
      * well as the child to read from.
@@ -20,10 +22,10 @@ public class Delete extends Operator {
      * @param child
      * The child operator from which to read tuples for deletion
      */
-    OpIterator operator;
-    int calledNum = 0;
+
     public Delete(TransactionId t, OpIterator child) {
         // some code goes here
+        tid=t;
         operator = child;
     }
 
@@ -71,7 +73,7 @@ public class Delete extends Operator {
             Tuple u=operator.next();
 
             try {
-                Database.getBufferPool().deleteTuple(null,u);
+                Database.getBufferPool().deleteTuple(tid,u);
                 num++;
             } catch (IOException e) {
                 e.printStackTrace();

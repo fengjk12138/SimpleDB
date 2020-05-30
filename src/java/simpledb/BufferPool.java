@@ -23,7 +23,7 @@ public class BufferPool {
     private static final int DEFAULT_PAGE_SIZE = 4096;
 
     private static int pageSize = DEFAULT_PAGE_SIZE;
-
+    private final long TIMEOUT = 200;
     /**
      * Default number of pages passed to the constructor. This is used by
      * other classes. BufferPool should use the numPages argument to the
@@ -55,6 +55,7 @@ public class BufferPool {
         exclusive_t_p = new ConcurrentHashMap<>();
         shared_p_t = new ConcurrentHashMap<>();
         exclusive_p_t = new ConcurrentHashMap<>();
+
     }
 
     public static int getPageSize() {
@@ -163,9 +164,6 @@ public class BufferPool {
     }
 
     private boolean canWrite(TransactionId tid, PageId pid) {
-        if (exclusive_p_t.containsKey(pid)) {
-            return exclusive_p_t.get(pid).equals(tid);
-        }
         if (shared_p_t.get(pid) == null)
             return true;
         for (TransactionId i : shared_p_t.get(pid)) {
@@ -175,14 +173,21 @@ public class BufferPool {
         return true;
     }
 
+
     private synchronized void addLock(TransactionId tid, PageId pid, Permissions pess) throws TransactionAbortedException {
-
-        if (exclusive_p_t.containsKey(pid)) {
-            while (!exclusive_p_t.get(pid).equals(tid)) ;
-//            System.out.println(tid.hashCode());
-//            System.out.println(exclusive_p_t.get(pid).hashCode());
+//        System.out.println(deadlock.size());
+//        if (deadlock.containsKey(tid) && System.currentTimeMillis() - deadlock.get(tid) <= TIMEOUT)
+//            throw new TransactionAbortedException();
+//        deadlock.remove(tid);
+        synchronized (this) {
+            if (exclusive_p_t.containsKey(pid)) {
+                long begintime = System.currentTimeMillis();
+                while (!exclusive_p_t.get(pid).equals(tid))
+                    if (System.currentTimeMillis() - begintime >= TIMEOUT) {
+                        throw new TransactionAbortedException();
+                    }
+            }
         }
-
         if (pess == Permissions.READ_ONLY) {
             HashSet<TransactionId> tmp = shared_p_t.get(pid);
             if (tmp == null)
@@ -196,7 +201,13 @@ public class BufferPool {
             shared_t_p.put(tid, tmp2);
 
         } else {
-            while (!canWrite(tid, pid)) ;
+            synchronized (this) {
+                long begintime = System.currentTimeMillis();
+                while (!canWrite(tid, pid))
+                    if (System.currentTimeMillis() - begintime >= TIMEOUT) {
+                        throw new TransactionAbortedException();
+                    }
+            }
             HashSet<TransactionId> tmp = shared_p_t.get(pid);
             if (tmp == null)
                 tmp = new HashSet<>();
@@ -214,7 +225,6 @@ public class BufferPool {
             tmp2.add(pid);
             exclusive_t_p.put(tid, tmp2);
         }
-
     }
 
     /**
@@ -259,16 +269,31 @@ public class BufferPool {
                     discardPage(i);
             }
         }
+        exclusive_t_p.remove(tid);
+        shared_t_p.remove(tid);
 
-        if (exclusive_t_p.containsKey(tid) && exclusive_t_p.get(tid) != null)
-            for (PageId i : exclusive_t_p.get(tid))
-                releasePage(tid, i);
+        for(HashSet<TransactionId> i:shared_p_t.values())
+        {
+            if(i!=null)
+                i.remove(tid);
+        }
+        ArrayList<PageId> tmp=new ArrayList<>();
+        for(PageId i:exclusive_p_t.keySet())
+            if(exclusive_p_t.get(i)!=null&&exclusive_p_t.get(i).equals(tid))
+                tmp.add(i);
+        for(PageId i:tmp)
+            exclusive_p_t.remove(i);
+
+
+//        if (exclusive_t_p.containsKey(tid) && exclusive_t_p.get(tid) != null)
+//            for (PageId i : exclusive_t_p.get(tid))
+//                releasePage(tid, i);
 //                exclusive_p_t.remove(i);
 //        exclusive_t_p.remove(tid);
 
-        if (shared_t_p.containsKey(tid) && shared_t_p.get(tid) != null)
-            for (PageId i : shared_t_p.get(tid))
-                releasePage(tid, i);
+//        if (shared_t_p.containsKey(tid) && shared_t_p.get(tid) != null)
+//            for (PageId i : shared_t_p.get(tid))
+//                releasePage(tid, i);
 //                if (shared_p_t.containsKey(i) && shared_p_t.get(i) != null) {
 //                    HashSet<TransactionId> tmp = shared_p_t.get(i);
 //                    tmp.remove(tid);
@@ -302,7 +327,7 @@ public class BufferPool {
         for (Page page : u) {
             if (page != null)
                 usedTime.put(page.getId(), ++nowTime);
-                totPage.put(page.getId(), page);
+            totPage.put(page.getId(), page);
         }
     }
 
@@ -370,7 +395,7 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
-        if (pid == null||totPage.get(pid)==null)
+        if (pid == null || totPage.get(pid) == null)
             return;
         DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
 
