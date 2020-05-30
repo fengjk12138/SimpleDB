@@ -24,6 +24,7 @@ public class BufferPool {
 
     private static int pageSize = DEFAULT_PAGE_SIZE;
     private final long TIMEOUT = 150;
+    private final boolean abortSelf = true;
     /**
      * Default number of pages passed to the constructor. This is used by
      * other classes. BufferPool should use the numPages argument to the
@@ -38,7 +39,7 @@ public class BufferPool {
 
     ConcurrentHashMap<PageId, HashSet<TransactionId>> shared_p_t;
     ConcurrentHashMap<PageId, TransactionId> exclusive_p_t;
-
+    HashSet<TransactionId> deadlock;
     int nowTime = 0;
 
     /**
@@ -55,6 +56,7 @@ public class BufferPool {
         exclusive_t_p = new ConcurrentHashMap<>();
         shared_p_t = new ConcurrentHashMap<>();
         exclusive_p_t = new ConcurrentHashMap<>();
+        deadlock = new HashSet<>();
 
     }
 
@@ -179,12 +181,22 @@ public class BufferPool {
 //        if (deadlock.containsKey(tid) && System.currentTimeMillis() - deadlock.get(tid) <= TIMEOUT)
 //            throw new TransactionAbortedException();
 //        deadlock.remove(tid);
+
+
         synchronized (this) {
             if (exclusive_p_t.containsKey(pid)) {
                 long begintime = System.currentTimeMillis();
                 while (!exclusive_p_t.get(pid).equals(tid))
                     if (System.currentTimeMillis() - begintime >= TIMEOUT) {
-                        throw new TransactionAbortedException();
+
+                        if (!abortSelf && !deadlock.contains(tid)) {
+                            throw new TransactionAbortedException();
+                        }
+
+
+                        if (!abortSelf)
+                            deadlock.add(tid);
+                        else throw new TransactionAbortedException();
                     }
             }
         }
@@ -205,7 +217,16 @@ public class BufferPool {
                 long begintime = System.currentTimeMillis();
                 while (!canWrite(tid, pid))
                     if (System.currentTimeMillis() - begintime >= TIMEOUT) {
-                        throw new TransactionAbortedException();
+
+
+                        if (!abortSelf && !deadlock.contains(tid)) {
+                            throw new TransactionAbortedException();
+                        }
+
+
+                        if (!abortSelf)
+                            deadlock.add(tid);
+                        else throw new TransactionAbortedException();
                     }
             }
             HashSet<TransactionId> tmp = shared_p_t.get(pid);
@@ -256,6 +277,9 @@ public class BufferPool {
             throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+
+        deadlock.remove(tid);
+
         if (commit) {
             flushPages(tid);
 
@@ -272,16 +296,15 @@ public class BufferPool {
         exclusive_t_p.remove(tid);
         shared_t_p.remove(tid);
 
-        for(HashSet<TransactionId> i:shared_p_t.values())
-        {
-            if(i!=null)
+        for (HashSet<TransactionId> i : shared_p_t.values()) {
+            if (i != null)
                 i.remove(tid);
         }
-        ArrayList<PageId> tmp=new ArrayList<>();
-        for(PageId i:exclusive_p_t.keySet())
-            if(exclusive_p_t.get(i)!=null&&exclusive_p_t.get(i).equals(tid))
+        ArrayList<PageId> tmp = new ArrayList<>();
+        for (PageId i : exclusive_p_t.keySet())
+            if (exclusive_p_t.get(i) != null && exclusive_p_t.get(i).equals(tid))
                 tmp.add(i);
-        for(PageId i:tmp)
+        for (PageId i : tmp)
             exclusive_p_t.remove(i);
 
 
